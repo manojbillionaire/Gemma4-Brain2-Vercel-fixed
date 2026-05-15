@@ -42,7 +42,6 @@ export default defineConfig(({ mode }) => {
             motion: ['motion'],
             markdown: ['react-markdown'],
             docx: ['docx', 'file-saver', 'jspdf'],
-            transformers: ['@xenova/transformers'],
             webllm: ['@mlc-ai/web-llm'],
           },
         },
