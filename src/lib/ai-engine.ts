@@ -239,41 +239,12 @@ Source: Chrome Legal Index (Local Cache)`;
     }
   }
 
-  // ── Sarvam TTS (unchanged) ────────────────────────────────
 
-  public async generateGemmaTTS(
-    text: string,
-    languageCode: string = "ml-IN"
-  ): Promise<string | null> {
-    const sarvamKey = (import.meta as any).env?.VITE_SARVAM_API_KEY;
-    if (!sarvamKey) return null;
-    try {
-      const response = await fetch("https://api.sarvam.ai/v1/tts", {
-        method: "POST",
-        headers: {
-          "api-subscription-key": sarvamKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          inputs: [text],
-          target_language_code: languageCode,
-          speaker: "meera",
-          pitch: 0,
-          pace: 1.0,
-          loudness: 1.5,
-          speech_sample_rate: 16000,
-          enable_preprocessing: true,
-          model: "bulbul:v1",
-        }),
-      });
-      const data = await response.json();
-      if (data?.audios?.length > 0) return data.audios[0];
-      return null;
-    } catch (err) {
-      console.error("Sarvam TTS Error:", err);
-      return null;
-    }
+  // TTS: use Web Speech API via MalayalamEngine (no external API needed)
+  public async generateGemmaTTS(_text: string, _languageCode: string = "ml-IN"): Promise<string | null> {
+    return null; // Falls through to browser SpeechSynthesis in the caller
   }
+
 }
 
 export const aiEngine = HybridAIEngine.getInstance();

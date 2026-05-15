@@ -700,15 +700,7 @@ export default function AdvocatePortal({ onBack }: { onBack: () => void }) {
       try { recognitionRef.current.stop(); } catch(e) {}
     }
     
-    if (downloadProgress < 100) {
-      const msg = isDownloading 
-        ? `Gemma 4 E2B brain is currently downloading (${downloadProgress}%). Please wait a moment.`
-        : "Error: Gemma 4 E2B brain not fully deployed. Please complete the download in the 'BRAIN' tab.";
-      setVoiceAiReply(msg);
-      setVoiceAiStatus('idle');
-      if (voiceAiOnRef.current) setTimeout(() => startVoiceAi(), 3000);
-      return;
-    }
+    // Brain1 removed — Qwen3-0.6B (Brain2) is the only engine; proceed directly
 
     setVoiceAiStatus('thinking');
     setVoiceAiReply("Thinking...");
@@ -1135,25 +1127,9 @@ export default function AdvocatePortal({ onBack }: { onBack: () => void }) {
     }
   }, []);
 
-  const handleDownloadGemma4 = async () => {
-    setIsDownloading(true);
-    setDownloadMessage("Initializing Nexus Justice Local Brain (Transformers.js)...");
-
-    const engine = HybridAIEngine.getInstance();
-    // Force reload if already downloaded to ensure we clear any bad state
-    await engine.loadLocalModel((progress) => {
-      setDownloadProgress(progress);
-      if (progress < 100) {
-        setDownloadMessage(`📥 Downloading & Loading Gemma 4 E2B... ${progress}%`);
-      } else {
-        setDownloadMessage("🔍 Optimizing local inference engine...");
-      }
-    }, downloadProgress === 100);
-
-    setDownloadMessage("✅ Success! Gemma 4 E2B is now running locally.");
-    setDownloadSlice(1); // Mark as complete
-    setIsDownloading(false);
-    setAiStatus(engine.getStatus());
+  // Brain1 removed — handleDownloadGemma4 is a no-op; use Brain2 tab to load Qwen3-0.6B
+  const handleDownloadGemma4 = () => {
+    setView('brain2');
   };
 
   const handleDownloadBrain2 = async () => {
@@ -1194,11 +1170,7 @@ export default function AdvocatePortal({ onBack }: { onBack: () => void }) {
     setMalayalamStatus(engine.getStatus());
   };
 
-  useEffect(() => {
-    if (connectionType === 'wifi' && downloadProgress < 100 && !isDownloading) {
-      handleDownloadGemma4();
-    }
-  }, [connectionType, downloadProgress, isDownloading]);
+  // Brain1 auto-download removed — only Qwen3-0.6B is used
 
   useEffect(() => {
     const init = async () => {
