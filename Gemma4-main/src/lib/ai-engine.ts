@@ -25,14 +25,20 @@ const BRAIN2_MODEL_ID = "nexus-qwen3-0.6b";
 const BRAIN2_HF_URL =
   "https://huggingface.co/Kichu123/nexus-qwen3-0.6b/resolve/main/";
 
-// Register the custom model so WebLLM can locate it
+// Find the prebuilt Qwen3-0.6B entry to reuse its verified wasm lib URL
+const _prebuiltQwen3 = webllm.prebuiltAppConfig.model_list.find(
+  (m: any) => m.model_id === "Qwen3-0.6B-q4f16_1-MLC"
+);
+
+// Register custom model using the official wasm — avoids 404 on every web-llm bump
 webllm.prebuiltAppConfig.model_list.push({
   model: BRAIN2_HF_URL,
   model_id: BRAIN2_MODEL_ID,
-  model_lib:
+  model_lib: _prebuiltQwen3?.model_lib ?? (
     webllm.modelLibURLPrefix +
     webllm.modelVersion +
-    "/Qwen3-0.6B-q4f16_1-ctx4k_cs1k-webgpu.wasm",
+    "/Qwen3-0.6B-q4f16_1-ctx4k_cs1k-webgpu.wasm"
+  ),
   vram_required_MB: 720,
   low_resource_required: true,
   overrides: { context_window_size: 2048 },
