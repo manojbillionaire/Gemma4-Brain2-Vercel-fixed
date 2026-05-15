@@ -250,7 +250,7 @@ export default function AdvocatePortal({ onBack }: { onBack: () => void }) {
   // Brain2 (Nexus Qwen3-0.6B via WebLLM) state
   const [brain2Progress, setBrain2Progress] = useState(0);
   const [isBrain2Downloading, setIsBrain2Downloading] = useState(false);
-  const [brain2Message, setBrain2Message] = useState('Nexus Qwen3-0.6B — WebGPU accelerated on-device model.');
+  const [brain2Message, setBrain2Message] = useState('Nexus Qwen2.5-1.5B — Primary WebGPU model. Qwen3-0.6B available as fallback.');
   const [brain2Ready, setBrain2Ready] = useState(false);
 
   const [showCompatibilityBanner, setShowCompatibilityBanner] = useState(true);
@@ -1127,14 +1127,14 @@ export default function AdvocatePortal({ onBack }: { onBack: () => void }) {
     }
   }, []);
 
-  // Brain1 removed — handleDownloadGemma4 is a no-op; use Brain2 tab to load Qwen3-0.6B
+  // handleDownloadGemma4 redirects to Brain2 tab to load Qwen2.5-1.5B
   const handleDownloadGemma4 = () => {
     setView('brain2');
   };
 
   const handleDownloadBrain2 = async () => {
     setIsBrain2Downloading(true);
-    setBrain2Message("Initializing WebLLM engine for Nexus Qwen3-0.6B...");
+    setBrain2Message("Initializing WebLLM engine for Nexus Qwen2.5-1.5B...");
     setBrain2Ready(false);
 
     const engine = HybridAIEngine.getInstance();
@@ -1147,7 +1147,7 @@ export default function AdvocatePortal({ onBack }: { onBack: () => void }) {
     setBrain2Ready(status.isBrain2Ready);
     setBrain2Message(
       status.isBrain2Ready
-        ? "✅ Brain2 (Nexus Qwen3-0.6B) is live via WebGPU."
+        ? "✅ Brain2 (Nexus Qwen2.5-1.5B) is live via WebGPU."
         : "⚠️ Brain2 failed to load. WebGPU may not be supported on this device."
     );
     setIsBrain2Downloading(false);
@@ -1170,7 +1170,7 @@ export default function AdvocatePortal({ onBack }: { onBack: () => void }) {
     setMalayalamStatus(engine.getStatus());
   };
 
-  // Brain1 auto-download removed — only Qwen3-0.6B is used
+  // Auto-download removed; user initiates from Brain2 tab
 
   useEffect(() => {
     const init = async () => {
@@ -2587,7 +2587,7 @@ ${response.text}`;
                 <div className="flex justify-between items-end">
                   <div>
                     <div className="text-[10px] font-black text-amber-500 tracking-[0.2em] mb-2 uppercase">On-Device · WebGPU · MLC Format</div>
-                    <h2 className="text-5xl font-black italic text-slate-200">Brain<span className="text-amber-500">2</span> <span className="text-slate-500 text-base ml-1">Nexus Qwen3-0.6B</span></h2>
+                    <h2 className="text-5xl font-black italic text-slate-200">Brain<span className="text-amber-500">2</span> <span className="text-slate-500 text-base ml-1">Nexus Qwen2.5-1.5B</span></h2>
                   </div>
                   <div className="bg-white/5 border border-white/10 rounded-2xl px-6 py-4 flex items-center gap-4">
                     <div className="text-right">
@@ -2609,12 +2609,12 @@ ${response.text}`;
 
                     <div className="grid grid-cols-2 gap-4">
                       {[
-                        { label: 'Model', value: 'Nexus Qwen3-0.6B' },
+                        { label: 'Model', value: 'Nexus Qwen2.5-1.5B' },
                         { label: 'Format', value: 'MLC / WebGPU' },
                         { label: 'Quantization', value: 'q4f16_1' },
-                        { label: 'VRAM Required', value: '~720 MB' },
-                        { label: 'Context Window', value: '2048 tokens' },
-                        { label: 'Source', value: 'Kichu123/nexus-qwen3-0.6b' },
+                        { label: 'VRAM Required', value: '~1800 MB' },
+                        { label: 'Context Window', value: '4096 tokens' },
+                        { label: 'Source', value: 'manojbillionaire123/Qwen2.5-1.5B-Instruct-q4f16_1-MLC' },
                       ].map((item, i) => (
                         <div key={i} className="p-4 bg-white/5 border border-white/5 rounded-2xl">
                           <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">{item.label}</div>
@@ -2628,7 +2628,7 @@ ${response.text}`;
                         <Info size={12} /> About Brain2
                       </div>
                       <p className="text-xs text-amber-500/70 leading-relaxed">
-                        Brain2 runs Nexus Qwen3-0.6B entirely on-device using WebLLM and WebGPU — no network calls after the initial download. It serves as the tertiary fallback in the inference chain (after Chrome Built-in AI and Brain1/Transformers.js). Ideal for advocates on high-RAM devices (4GB+ VRAM) or when both Brain1 and Chrome Nano are unavailable.
+                        Brain2 runs Nexus Qwen2.5-1.5B entirely on-device using WebLLM and WebGPU — no network calls after the initial download. It is the primary inference engine. If your device lacks sufficient VRAM, Qwen3-0.6B (720 MB) loads automatically as a fallback.
                       </p>
                     </div>
 
@@ -2651,7 +2651,7 @@ ${response.text}`;
 
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-300">Nexus Qwen3-0.6B</span>
+                          <span className="text-xs font-bold text-slate-300">Nexus Qwen2.5-1.5B</span>
                           <span className={`text-[10px] font-black uppercase ${brain2Ready ? 'text-emerald-500' : 'text-slate-500'}`}>
                             {brain2Ready ? 'Loaded' : brain2Progress > 0 && brain2Progress < 100 ? `${brain2Progress}%` : 'Not loaded'}
                           </span>
@@ -2695,7 +2695,7 @@ ${response.text}`;
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
-                          ~350 MB download (model shards + tokenizer)
+                          ~880 MB download (model shards + tokenizer)
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
