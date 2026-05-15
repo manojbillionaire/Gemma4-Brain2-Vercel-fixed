@@ -290,7 +290,24 @@ Source: Chrome Legal Index (Local Cache)`;
       }
     }
 
-    // 3. Brain1 (Transformers.js)
+    // 3. Brain2 (WebLLM — Nexus Qwen3-0.6B) — preferred: WebGPU accelerated
+    if (this.brain2Engine) {
+      try {
+        yield { text: "", model: "Brain2", status: "Engaging Brain2 (Nexus Qwen3-0.6B)..." };
+        for await (const token of this.streamBrain2Response(prompt, history)) {
+          yield {
+            text: token,
+            model: isAgentic ? "Brain2 (Agentic)" : "Brain2 — Nexus Qwen3-0.6B",
+          };
+        }
+        return;
+      } catch (err) {
+        console.error("Brain2 stream failed, falling back to Brain1:", err);
+        // fall through to Brain1
+      }
+    }
+
+    // 4. Brain1 (Transformers.js) — CPU fallback
     if (this.localPipeline) {
       try {
         yield { text: "", model: "Gemma 4 E2B", status: "Engaging Brain1 Neural Core..." };
@@ -304,24 +321,6 @@ Source: Chrome Legal Index (Local Cache)`;
       } catch (e) {
         console.error("Brain1 inference failed:", e);
         yield { text: "Error: Brain1 inference failed.", model: "Local Error" };
-        return;
-      }
-    }
-
-    // 4. Brain2 (WebLLM — Nexus Qwen3-0.6B)
-    if (this.brain2Engine) {
-      try {
-        yield { text: "", model: "Brain2", status: "Engaging Brain2 (Nexus Qwen3-0.6B)..." };
-        for await (const token of this.streamBrain2Response(prompt, history)) {
-          yield {
-            text: token,
-            model: isAgentic ? "Brain2 (Agentic)" : "Brain2 — Nexus Qwen3-0.6B",
-          };
-        }
-        return;
-      } catch (err) {
-        console.error("Brain2 stream failed:", err);
-        yield { text: "Error: Brain2 inference failed.", model: "Brain2 Error" };
         return;
       }
     }
@@ -372,7 +371,17 @@ Source: Chrome Legal Index (Local Cache)`;
         } catch { console.log("Chrome Native AI failed."); }
       }
 
-      // Brain1
+      // Brain2 — preferred: WebGPU accelerated
+      if (this.brain2Engine && !imageBase64) {
+        try {
+          const text = await this.generateBrain2Response(finalPrompt, history);
+          if (text) return { text, model: isAgentic ? "Brain2 (Agentic)" : "Brain2 — Nexus Qwen3-0.6B" };
+        } catch {
+          console.warn("Brain2 failed, falling back to Brain1");
+        }
+      }
+
+      // Brain1 — CPU fallback
       if (this.localPipeline && !imageBase64) {
         try {
           const text = await this.generateLocalResponse(finalPrompt, history);
@@ -380,17 +389,6 @@ Source: Chrome Legal Index (Local Cache)`;
           return { text: "Brain1 unable to process this request.", model: "Local Error" };
         } catch {
           return { text: "Brain1 inference failed.", model: "Local Error" };
-        }
-      }
-
-      // Brain2
-      if (this.brain2Engine && !imageBase64) {
-        try {
-          const text = await this.generateBrain2Response(finalPrompt, history);
-          if (text) return { text, model: isAgentic ? "Brain2 (Agentic)" : "Brain2 — Nexus Qwen3-0.6B" };
-          return { text: "Brain2 unable to process this request.", model: "Brain2 Error" };
-        } catch {
-          return { text: "Brain2 inference failed.", model: "Brain2 Error" };
         }
       }
 
