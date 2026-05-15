@@ -1,5 +1,0 @@
-{
-  "name": "Nexus Gemma 4 Justice",
-  "description": "A justice-focused legal assistant exclusively powered by Gemma 4 with integrated Chrome search for real-time judicial research.",
-  "requestFramePermissions": ["microphone", "camera"]
-}
