@@ -79,7 +79,7 @@ const sideNav = [
   { id: 'read', label: 'Read', icon: "M15 12a3 3 0 11-6 0 3 3 0 016 0z" },
   { id: 'convert', label: 'Convert', icon: "M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" },
   { id: 'models', label: 'BRAIN', icon: "M4 7v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2zm0 4h16m-16 4h16" },
-  { id: 'brain2', label: 'BRAIN2', icon: "M9.5 2a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm5 0a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM5 9.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm14 0a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM9.5 17a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm5 0a2.5 2.5 0 110 5 2.5 2.5 0 010-5z" },
+  { id: 'brain2', label: 'BRAINS', icon: "M9.5 2a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm5 0a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM5 9.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm14 0a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM9.5 17a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm5 0a2.5 2.5 0 110 5 2.5 2.5 0 010-5z" },
 ];
 
 const topTabs = [
@@ -95,7 +95,7 @@ const topTabs = [
   { id: 'read', label: 'READ' },
   { id: 'convert', label: 'CONVERT' },
   { id: 'models', label: 'BRAIN' },
-  { id: 'brain2', label: 'BRAIN2' },
+  { id: 'brain2', label: 'BRAINS' },
 ];
 
 const CONVERTER_STEPS = [
@@ -247,10 +247,15 @@ export default function AdvocatePortal({ onBack }: { onBack: () => void }) {
   const [downloadSlice, setDownloadSlice] = useState(0); // 0: none, 1: complete
   const [downloadMessage, setDownloadMessage] = useState('Nexus Justice Smart Download Active.');
 
-  // Brain2 (Nexus Qwen3-0.6B via WebLLM) state
+  // Brain1 — Qwen3.5-0.8B Q4_K_M (primary)
+  const [brain1Progress, setBrain1Progress] = useState(0);
+  const [isBrain1Downloading, setIsBrain1Downloading] = useState(false);
+  const [brain1Message, setBrain1Message] = useState('Nexus Qwen3.5-0.8B · ~533 MB · Q4_K_M · Works on any phone');
+  const [brain1Ready, setBrain1Ready] = useState(false);
+  // Brain2 — Qwen3.5-0.8B Q3_K_M (lighter fallback)
   const [brain2Progress, setBrain2Progress] = useState(0);
   const [isBrain2Downloading, setIsBrain2Downloading] = useState(false);
-  const [brain2Message, setBrain2Message] = useState('Nexus Qwen2.5-1.5B — Primary WebGPU model. Qwen3-0.6B available as fallback.');
+  const [brain2Message, setBrain2Message] = useState('Nexus Qwen3.5-0.8B Light · ~470 MB · Q3_K_M · Low-RAM devices');
   const [brain2Ready, setBrain2Ready] = useState(false);
 
   const [showCompatibilityBanner, setShowCompatibilityBanner] = useState(true);
@@ -1473,7 +1478,7 @@ ${response.text}`;
         <div className="flex bg-[#070b14] border-b border-white/5 px-6 overflow-x-auto whitespace-nowrap custom-scrollbar">
           {topTabs.map(tab => {
             const label = tab.id === 'models'
-              ? (downloadProgress === 100 ? 'BRAIN DOWNLOADED' : (isDownloading ? 'DOWNLOADING...' : 'BRAIN'))
+              ? (downloadProgress === 100 ? 'BRAINS ACTIVE' : (isDownloading ? 'DOWNLOADING...' : 'BRAIN'))
               : tab.label;
             return (
               <button
@@ -2583,130 +2588,166 @@ ${response.text}`;
             )}
 
             {view === 'brain2' && (
-              <motion.div key="brain2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full p-8 flex flex-col gap-8 overflow-hidden">
-                <div className="flex justify-between items-end">
-                  <div>
-                    <div className="text-[10px] font-black text-amber-500 tracking-[0.2em] mb-2 uppercase">On-Device · WebGPU · MLC Format</div>
-                    <h2 className="text-5xl font-black italic text-slate-200">Brain<span className="text-amber-500">2</span> <span className="text-slate-500 text-base ml-1">Nexus Qwen2.5-1.5B</span></h2>
-                  </div>
-                  <div className="bg-white/5 border border-white/10 rounded-2xl px-6 py-4 flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">WebGPU Status</div>
-                      <div className={`text-sm font-black uppercase ${brain2Ready ? 'text-emerald-500' : 'text-amber-500'}`}>
-                        {brain2Ready ? 'Active' : isBrain2Downloading ? 'Loading...' : 'Standby'}
-                      </div>
-                    </div>
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${brain2Ready ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                      <Cpu size={20} />
-                    </div>
+              <motion.div key="brain2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full p-6 flex flex-col gap-6 overflow-y-auto">
+                {/* Header */}
+                <div>
+                  <div className="text-[10px] font-black text-amber-500 tracking-[0.2em] mb-1 uppercase">On-Device · CPU/WASM · GGUF Format · Works on Any Phone</div>
+                  <h2 className="text-4xl font-black italic text-slate-200">Nexus <span className="text-amber-500">Brains</span></h2>
+                  <p className="text-xs text-slate-500 mt-1">No WebGPU required. Downloads once, runs fully offline. Download Brain1, Brain2, or both.</p>
+                </div>
+
+                {/* Inference chain */}
+                <div className="p-4 bg-white/5 border border-white/5 rounded-2xl">
+                  <div className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">Active Inference Chain</div>
+                  <div className="flex items-center gap-2 text-[10px] font-bold flex-wrap">
+                    <span className={`px-3 py-1 rounded-full border ${brain1Ready ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-white/5 text-slate-500 border-white/10'}`}>
+                      1. Brain1 — Qwen3.5-0.8B {brain1Ready ? '✓' : '(not loaded)'}
+                    </span>
+                    <span className="text-slate-600">→</span>
+                    <span className={`px-3 py-1 rounded-full border ${brain2Ready ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-white/5 text-slate-500 border-white/10'}`}>
+                      2. Brain2 — Qwen3.5-0.8B Light {brain2Ready ? '✓' : '(not loaded)'}
+                    </span>
+                    <span className="text-slate-600">→</span>
+                    <span className="bg-slate-800 text-slate-500 px-3 py-1 rounded-full border border-white/5">3. Offline</span>
                   </div>
                 </div>
 
-                <div className="flex-1 flex gap-8 overflow-hidden">
-                  {/* Left: Model Info */}
-                  <div className="flex-1 bg-slate-900/50 border border-white/5 rounded-[40px] p-10 flex flex-col gap-6 overflow-y-auto">
-                    <div className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Model Details</div>
+                {/* Two-column download cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                    <div className="grid grid-cols-2 gap-4">
+                  {/* Brain1 Card */}
+                  <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-[32px] p-6 flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Brain1 · Primary</div>
+                        <div className="text-lg font-black text-slate-200">Qwen3.5-0.8B</div>
+                        <div className="text-[10px] text-slate-400">Q4_K_M · ~533 MB · Best quality</div>
+                      </div>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${brain1Ready ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-slate-500'}`}>
+                        <Cpu size={18} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
                       {[
-                        { label: 'Model', value: 'Nexus Qwen2.5-1.5B' },
-                        { label: 'Format', value: 'MLC / WebGPU' },
-                        { label: 'Quantization', value: 'q4f16_1' },
-                        { label: 'VRAM Required', value: '~1800 MB' },
-                        { label: 'Context Window', value: '4096 tokens' },
-                        { label: 'Source', value: 'manojbillionaire123/Qwen2.5-1.5B-Instruct-q4f16_1-MLC' },
+                        { label: 'Format', value: 'GGUF / WASM' },
+                        { label: 'Quant', value: 'Q4_K_M' },
+                        { label: 'Size', value: '~533 MB' },
+                        { label: 'RAM needed', value: '~1.5 GB' },
+                        { label: 'Context', value: '2048 tokens' },
+                        { label: 'WebGPU', value: 'Not needed' },
                       ].map((item, i) => (
-                        <div key={i} className="p-4 bg-white/5 border border-white/5 rounded-2xl">
-                          <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">{item.label}</div>
-                          <div className="text-sm font-bold text-slate-200">{item.value}</div>
+                        <div key={i} className="p-2 bg-white/5 rounded-xl">
+                          <div className="text-[8px] font-black text-slate-500 uppercase">{item.label}</div>
+                          <div className="text-[10px] font-bold text-slate-300">{item.value}</div>
                         </div>
                       ))}
                     </div>
 
-                    <div className="p-6 bg-amber-500/5 border border-amber-500/10 rounded-3xl">
-                      <div className="text-[10px] font-black text-amber-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                        <Info size={12} /> About Brain2
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-[9px] text-slate-400">Download progress</span>
+                        <span className={`text-[9px] font-black uppercase ${brain1Ready ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          {brain1Ready ? 'LOADED' : brain1Progress > 0 && brain1Progress < 100 ? `${brain1Progress}%` : 'NOT LOADED'}
+                        </span>
                       </div>
-                      <p className="text-xs text-amber-500/70 leading-relaxed">
-                        Brain2 runs Nexus Qwen2.5-1.5B entirely on-device using WebLLM and WebGPU — no network calls after the initial download. It is the primary inference engine. If your device lacks sufficient VRAM, Qwen3-0.6B (720 MB) loads automatically as a fallback.
-                      </p>
+                      <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                        <motion.div className="h-full bg-emerald-500" animate={{ width: `${brain1Progress}%` }} transition={{ ease: 'easeOut' }} />
+                      </div>
+                      <div className="text-[8px] text-slate-500 italic">{brain1Message}</div>
                     </div>
 
-                    <div className="p-6 bg-white/5 border border-white/5 rounded-3xl">
-                      <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-3">Inference Chain Position</div>
-                      <div className="flex items-center gap-3 text-xs font-bold">
-                        <span className="bg-indigo-500/20 text-indigo-400 px-3 py-1 rounded-full border border-indigo-500/30">1. Chrome Gemma Nano</span>
-                        <span className="text-slate-600">→</span>
-                        <span className="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/30">2. Brain1 Qwen1.5</span>
-                        <span className="text-slate-600">→</span>
-                        <span className="bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full border border-amber-500/30 animate-pulse">3. Brain2 ← You are here</span>
+                    <button
+                      onClick={handleDownloadBrain1}
+                      disabled={isBrain1Downloading}
+                      className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-black text-[10px] uppercase tracking-[0.15em] rounded-xl flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                      {isBrain1Downloading
+                        ? <><RotateCcw size={14} className="animate-spin" /> Downloading...</>
+                        : brain1Ready
+                          ? <><RotateCcw size={14} /> Reload Brain1</>
+                          : <><Download size={14} /> Download Brain1</>
+                      }
+                    </button>
+
+                    {brain1Ready && (
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-[9px] font-bold text-center uppercase tracking-widest flex items-center justify-center gap-2">
+                        <CheckCircle size={12} /> Brain1 Active · CPU/WASM
                       </div>
-                    </div>
+                    )}
                   </div>
 
-                  {/* Right: Download Panel */}
-                  <div className="w-96 flex flex-col gap-6">
-                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-[40px] p-8 flex flex-col gap-6">
-                      <div className="text-[10px] font-black text-amber-400 uppercase tracking-widest">Download & Deploy Brain2</div>
-
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-300">Nexus Qwen2.5-1.5B</span>
-                          <span className={`text-[10px] font-black uppercase ${brain2Ready ? 'text-emerald-500' : 'text-slate-500'}`}>
-                            {brain2Ready ? 'Loaded' : brain2Progress > 0 && brain2Progress < 100 ? `${brain2Progress}%` : 'Not loaded'}
-                          </span>
-                        </div>
-                        <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                          <motion.div
-                            className="h-full bg-amber-500"
-                            animate={{ width: `${brain2Progress}%` }}
-                            transition={{ ease: 'easeOut' }}
-                          />
-                        </div>
-                        <div className="text-[9px] text-slate-400 italic">{brain2Message}</div>
+                  {/* Brain2 Card */}
+                  <div className="bg-amber-500/5 border border-amber-500/20 rounded-[32px] p-6 flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Brain2 · Fallback</div>
+                        <div className="text-lg font-black text-slate-200">Qwen3.5-0.8B Light</div>
+                        <div className="text-[10px] text-slate-400">Q3_K_M · ~470 MB · Low-RAM devices</div>
                       </div>
-
-                      <button
-                        onClick={handleDownloadBrain2}
-                        disabled={isBrain2Downloading}
-                        className="w-full py-5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-[0_4px_20px_rgba(245,158,11,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-                      >
-                        {isBrain2Downloading
-                          ? <><RotateCcw size={16} className="animate-spin" /> Downloading Brain2...</>
-                          : brain2Ready
-                            ? <><RotateCcw size={16} /> Reload Brain2</>
-                            : <><Download size={16} /> Download Brain2</>
-                        }
-                      </button>
-
-                      {brain2Ready && (
-                        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400 text-[9px] font-bold text-center uppercase tracking-widest flex items-center justify-center gap-2">
-                          <CheckCircle size={14} /> Brain2 fully deployed · WebGPU active
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="bg-white/5 border border-white/5 rounded-[40px] p-8">
-                      <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Requirements</div>
-                      <div className="space-y-3 text-xs text-slate-400">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
-                          Chrome 113+ or Edge 113+ (WebGPU required)
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
-                          ~880 MB download (model shards + tokenizer)
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
-                          4 GB+ device RAM recommended
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                          Fully offline after download
-                        </div>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${brain2Ready ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-slate-500'}`}>
+                        <Cpu size={18} />
                       </div>
                     </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'Format', value: 'GGUF / WASM' },
+                        { label: 'Quant', value: 'Q3_K_M' },
+                        { label: 'Size', value: '~470 MB' },
+                        { label: 'RAM needed', value: '~1.2 GB' },
+                        { label: 'Context', value: '2048 tokens' },
+                        { label: 'WebGPU', value: 'Not needed' },
+                      ].map((item, i) => (
+                        <div key={i} className="p-2 bg-white/5 rounded-xl">
+                          <div className="text-[8px] font-black text-slate-500 uppercase">{item.label}</div>
+                          <div className="text-[10px] font-bold text-slate-300">{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-[9px] text-slate-400">Download progress</span>
+                        <span className={`text-[9px] font-black uppercase ${brain2Ready ? 'text-amber-400' : 'text-slate-500'}`}>
+                          {brain2Ready ? 'LOADED' : brain2Progress > 0 && brain2Progress < 100 ? `${brain2Progress}%` : 'NOT LOADED'}
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                        <motion.div className="h-full bg-amber-500" animate={{ width: `${brain2Progress}%` }} transition={{ ease: 'easeOut' }} />
+                      </div>
+                      <div className="text-[8px] text-slate-500 italic">{brain2Message}</div>
+                    </div>
+
+                    <button
+                      onClick={handleDownloadBrain2}
+                      disabled={isBrain2Downloading}
+                      className="w-full py-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-black text-[10px] uppercase tracking-[0.15em] rounded-xl flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                      {isBrain2Downloading
+                        ? <><RotateCcw size={14} className="animate-spin" /> Downloading...</>
+                        : brain2Ready
+                          ? <><RotateCcw size={14} /> Reload Brain2</>
+                          : <><Download size={14} /> Download Brain2</>
+                      }
+                    </button>
+
+                    {brain2Ready && (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-[9px] font-bold text-center uppercase tracking-widest flex items-center justify-center gap-2">
+                        <CheckCircle size={12} /> Brain2 Active · CPU/WASM
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bottom info */}
+                <div className="p-5 bg-white/5 border border-white/5 rounded-2xl">
+                  <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3">How it works</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[10px] text-slate-400">
+                    <div className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1 flex-shrink-0" />Works on any Android phone — no WebGPU needed</div>
+                    <div className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1 flex-shrink-0" />Downloads once, cached in browser — fully offline</div>
+                    <div className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1 flex-shrink-0" />Brain1 is preferred; Brain2 activates if Brain1 not loaded</div>
+                    <div className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1 flex-shrink-0" />2–8 tokens/sec on budget phones; faster on mid-range</div>
                   </div>
                 </div>
               </motion.div>

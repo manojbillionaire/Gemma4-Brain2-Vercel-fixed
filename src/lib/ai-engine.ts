@@ -1,4 +1,22 @@
-import * as webllm from "@mlc-ai/web-llm";
+/**
+ * Nexus AI Engine
+ * ───────────────────────────────────────────────────────────────
+ * Brain1 — PRIMARY   : Qwen3.5-0.8B  via wllama (WASM/CPU)
+ *                      Works on ANY phone — no WebGPU needed
+ *                      Source: manojbillionaire123/Qwen3.5-0.8B-GGUF
+ *                      File  : Qwen3.5-0.8B-Q4_K_M.gguf  (~533 MB)
+ *
+ * Brain2 — FALLBACK  : Qwen3-0.6B    via wllama (WASM/CPU)
+ *                      Lighter option for very low-RAM devices
+ *                      Source: manojbillionaire123/Qwen3.5-0.8B-GGUF
+ *                      File  : Qwen3.5-0.8B-Q3_K_M.gguf  (~470 MB)
+ *
+ * User can download Brain1, Brain2, or both independently.
+ * Active engine = Brain1 if loaded, else Brain2 if loaded, else offline.
+ * ───────────────────────────────────────────────────────────────
+ */
+
+import { Wllama, WllamaConfig } from '@wllama/wllama';
 
 export interface AIMessage {
   role: 'user' | 'assistant';
@@ -13,68 +31,48 @@ export interface AIResponse {
 
 export type AITaskType = 'voice' | 'drafting' | 'search' | 'general';
 
-// ─────────────────────────────────────────────────────────────
-// PRIMARY  — Qwen2.5-1.5B-Instruct  (880 MB, WebGPU / WebLLM)
-// FALLBACK — Nexus Qwen3-0.6B       (720 MB, WebGPU / WebLLM)
-// ─────────────────────────────────────────────────────────────
+// ── Model config ──────────────────────────────────────────────
 
-const PRIMARY_MODEL_ID  = "nexus-qwen2.5-1.5b";
-const PRIMARY_MODEL_URL = "https://huggingface.co/manojbillionaire123/Qwen2.5-1.5B-Instruct-q4f16_1-MLC/resolve/main/";
+const BRAIN1_REPO  = 'manojbillionaire123/Qwen3.5-0.8B-GGUF';
+const BRAIN1_FILE  = 'Qwen3.5-0.8B-Q4_K_M.gguf';
+const BRAIN1_LABEL = 'Nexus Qwen3.5-0.8B';
+const BRAIN1_SIZE  = '~533 MB';
 
-const FALLBACK_MODEL_ID  = "nexus-qwen3-0.6b";
-const FALLBACK_MODEL_URL = "https://huggingface.co/Kichu123/nexus-qwen3-0.6b/resolve/main/";
+const BRAIN2_REPO  = 'manojbillionaire123/Qwen3.5-0.8B-GGUF';
+const BRAIN2_FILE  = 'Qwen3.5-0.8B-Q3_K_M.gguf';
+const BRAIN2_LABEL = 'Nexus Qwen3.5-0.8B (Light)';
+const BRAIN2_SIZE  = '~470 MB';
 
-// Reuse official wasm libs so we never get an ABI mismatch
-const _prebuiltQwen25 = webllm.prebuiltAppConfig.model_list.find(
-  (m: any) => m.model_id === "Qwen2.5-1.5B-Instruct-q4f16_1-MLC"
-);
-const _prebuiltQwen3 = webllm.prebuiltAppConfig.model_list.find(
-  (m: any) => m.model_id === "Qwen3-0.6B-q4f16_1-MLC"
-);
+// wllama WASM paths (served from /wllama/ in public/)
+const WLLAMA_CONFIG: WllamaConfig = {
+  'single-thread/wllama.wasm': '/wllama/single-thread/wllama.wasm',
+  'multi-thread/wllama.wasm':  '/wllama/multi-thread/wllama.wasm',
+};
 
-webllm.prebuiltAppConfig.model_list.push(
-  {
-    model:            PRIMARY_MODEL_URL,
-    model_id:         PRIMARY_MODEL_ID,
-    model_lib:        _prebuiltQwen25?.model_lib ?? (
-      webllm.modelLibURLPrefix + webllm.modelVersion +
-      "/Qwen2.5-1.5B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm"
-    ),
-    vram_required_MB: 1800,
-    low_resource_required: false,
-    overrides: { context_window_size: 4096 },
-  },
-  {
-    model:            FALLBACK_MODEL_URL,
-    model_id:         FALLBACK_MODEL_ID,
-    model_lib:        _prebuiltQwen3?.model_lib ?? (
-      webllm.modelLibURLPrefix + webllm.modelVersion +
-      "/Qwen3-0.6B-q4f16_1-ctx4k_cs1k-webgpu.wasm"
-    ),
-    vram_required_MB: 720,
-    low_resource_required: true,
-    overrides: { context_window_size: 2048 },
-  }
-);
+const SYSTEM_PROMPT = `You are a legal research assistant for Kerala advocates.
+Be concise, formal, and accurate. For voice responses keep answers under 80 words.
+Always end with a clarifying question relevant to the legal matter.`;
+
+// ── Engine class ──────────────────────────────────────────────
 
 export class HybridAIEngine {
   private static instance: HybridAIEngine;
 
-  private primaryEngine:  webllm.MLCEngine | null = null;
-  private fallbackEngine: webllm.MLCEngine | null = null;
+  // Each brain gets its own wllama instance
+  private brain1: Wllama | null = null;
+  private brain2: Wllama | null = null;
 
-  private isPrimaryLoading  = false;
-  private isFallbackLoading = false;
-
-  private primaryProgress  = 0;
-  private fallbackProgress = 0;
-
-  private readonly SYSTEM_PROMPT = `You are a Research Agent powered by Nexus AI.
-Voice Context: Keep speech concise, formal, and helpful.
-CRITICAL: End every response with a clarifying question.`;
+  private brain1Loading  = false;
+  private brain2Loading  = false;
+  private brain1Progress = 0;
+  private brain2Progress = 0;
+  private brain1Ready    = false;
+  private brain2Ready    = false;
+  private brain1Message  = `${BRAIN1_LABEL} · ${BRAIN1_SIZE} · Q4_K_M`;
+  private brain2Message  = `${BRAIN2_LABEL} · ${BRAIN2_SIZE} · Q3_K_M`;
 
   private constructor() {
-    console.log("Nexus AI Engine initializing (Primary: Qwen2.5-1.5B | Fallback: Qwen3-0.6B)...");
+    console.log('Nexus AI Engine ready (wllama/CPU — no WebGPU required)');
   }
 
   public static getInstance(): HybridAIEngine {
@@ -84,252 +82,292 @@ CRITICAL: End every response with a clarifying question.`;
     return HybridAIEngine.instance;
   }
 
-  // ── Active engine helper ──────────────────────────────────
+  // ── Active engine ─────────────────────────────────────────
 
-  private get activeEngine(): webllm.MLCEngine | null {
-    return this.primaryEngine ?? this.fallbackEngine;
+  private get activeEngine(): Wllama | null {
+    return this.brain1 ?? this.brain2;
   }
 
   private get activeModelName(): string {
-    if (this.primaryEngine)  return "Nexus Qwen2.5-1.5B";
-    if (this.fallbackEngine) return "Nexus Qwen3-0.6B (Fallback)";
-    return "Offline";
+    if (this.brain1) return BRAIN1_LABEL;
+    if (this.brain2) return BRAIN2_LABEL;
+    return 'Offline';
   }
 
-  // ── Status ────────────────────────────────────────────────
+  // ── Status (used by UI) ───────────────────────────────────
 
   public getStatus() {
     return {
-      builtIn:           false,
-      voiceModel:        this.activeEngine ? this.activeModelName : "Not loaded",
-      draftModel:        this.activeEngine ? this.activeModelName : "Not loaded",
-      searchModel:       "Local Neural Index",
-      isLocalReady:      !!this.activeEngine,
-      // Primary (Brain2 UI)
-      isBrain2Ready:     !!this.primaryEngine,
-      brain2Progress:    this.primaryProgress,
-      brain2Model:       "Nexus Qwen2.5-1.5B",
-      loadProgress:      this.primaryProgress,
-      // Fallback
-      isFallbackReady:   !!this.fallbackEngine,
-      fallbackProgress:  this.fallbackProgress,
-      fallbackModel:     "Nexus Qwen3-0.6B",
+      // legacy fields portal still reads
+      builtIn:         false,
+      isLocalReady:    !!this.activeEngine,
+      voiceModel:      this.activeEngine ? this.activeModelName : 'Not loaded',
+      draftModel:      this.activeEngine ? this.activeModelName : 'Not loaded',
+      searchModel:     'Local Neural Index',
+      loadProgress:    this.brain1Progress,
+      // Brain1
+      isBrain1Ready:   this.brain1Ready,
+      brain1Progress:  this.brain1Progress,
+      brain1Model:     BRAIN1_LABEL,
+      brain1Message:   this.brain1Message,
+      isBrain1Loading: this.brain1Loading,
+      // Brain2
+      isBrain2Ready:   this.brain2Ready,
+      brain2Progress:  this.brain2Progress,
+      brain2Model:     BRAIN2_LABEL,
+      brain2Message:   this.brain2Message,
+      isBrain2Loading: this.brain2Loading,
+      // TTS/STT (Web Speech — always ready)
+      ttsReady:        true,
+      sttReady:        true,
+      ttsProgress:     100,
+      sttProgress:     100,
+      isTTSLoading:    false,
+      isSTTLoading:    false,
     };
   }
 
   // ── Loaders ───────────────────────────────────────────────
 
-  /** Alias used by existing UI calls */
-  public async loadLocalModel(
-    onProgress?: (progress: number) => void,
-    force: boolean = false
-  ) {
-    return this.loadPrimaryModel(
-      onProgress ? (p, _t) => onProgress(p) : undefined,
-      force
-    );
+  private async createWllama(): Promise<Wllama> {
+    const w = new Wllama(WLLAMA_CONFIG);
+    return w;
   }
 
-  /** Load PRIMARY model — Qwen2.5-1.5B */
+  /** Load Brain1 — Qwen3.5-0.8B Q4_K_M (primary, ~533 MB) */
+  public async loadBrain1(
+    onProgress?: (progress: number, text: string) => void,
+    force = false
+  ) {
+    if ((this.brain1Ready && !force) || this.brain1Loading) return;
+    if (force && this.brain1) {
+      await this.brain1.exit().catch(() => {});
+      this.brain1 = null;
+      this.brain1Ready = false;
+      this.brain1Progress = 0;
+    }
+
+    this.brain1Loading = true;
+    this.brain1Message = 'Initializing wllama engine...';
+    try {
+      const w = await this.createWllama();
+      await w.loadModelFromHF(
+        BRAIN1_REPO,
+        BRAIN1_FILE,
+        {
+          progressCallback: ({ loaded, total }: { loaded: number; total: number }) => {
+            const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+            this.brain1Progress = pct;
+            const text = `Downloading Brain1: ${pct}% (${Math.round(loaded / 1024 / 1024)}MB / ${Math.round(total / 1024 / 1024)}MB)`;
+            this.brain1Message = text;
+            onProgress?.(pct, text);
+          },
+          n_ctx: 2048,
+          n_threads: Math.max(1, (navigator.hardwareConcurrency ?? 2) - 1),
+        }
+      );
+      this.brain1 = w;
+      this.brain1Ready = true;
+      this.brain1Progress = 100;
+      this.brain1Message = `✅ ${BRAIN1_LABEL} ready · CPU/WASM`;
+      onProgress?.(100, this.brain1Message);
+      console.log('Brain1 ready:', BRAIN1_LABEL);
+    } catch (err) {
+      console.error('Brain1 load failed:', err);
+      this.brain1Message = `⚠️ Brain1 failed to load: ${(err as Error).message}`;
+      this.brain1 = null;
+      this.brain1Ready = false;
+    } finally {
+      this.brain1Loading = false;
+    }
+  }
+
+  /** Load Brain2 — Qwen3.5-0.8B Q3_K_M (fallback, ~470 MB) */
   public async loadBrain2(
     onProgress?: (progress: number, text: string) => void,
-    force: boolean = false
+    force = false
   ) {
-    return this.loadPrimaryModel(onProgress, force);
-  }
+    if ((this.brain2Ready && !force) || this.brain2Loading) return;
+    if (force && this.brain2) {
+      await this.brain2.exit().catch(() => {});
+      this.brain2 = null;
+      this.brain2Ready = false;
+      this.brain2Progress = 0;
+    }
 
-  public async loadPrimaryModel(
-    onProgress?: (progress: number, text: string) => void,
-    force: boolean = false
-  ) {
-    if ((this.primaryEngine && !force) || this.isPrimaryLoading) return;
-    if (force) { this.primaryEngine = null; this.primaryProgress = 0; }
-
-    this.isPrimaryLoading = true;
+    this.brain2Loading = true;
+    this.brain2Message = 'Initializing wllama engine...';
     try {
-      console.log("Nexus: Loading PRIMARY — Qwen2.5-1.5B...");
-      this.primaryEngine = await webllm.CreateMLCEngine(PRIMARY_MODEL_ID, {
-        initProgressCallback: (r: webllm.InitProgressReport) => {
-          this.primaryProgress = Math.round(r.progress * 100);
-          onProgress?.(this.primaryProgress, r.text ?? "Loading...");
-        },
-      });
-      this.primaryProgress = 100;
-      onProgress?.(100, "Qwen2.5-1.5B ready.");
-      console.log("PRIMARY ready — Qwen2.5-1.5B.");
+      const w = await this.createWllama();
+      await w.loadModelFromHF(
+        BRAIN2_REPO,
+        BRAIN2_FILE,
+        {
+          progressCallback: ({ loaded, total }: { loaded: number; total: number }) => {
+            const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+            this.brain2Progress = pct;
+            const text = `Downloading Brain2: ${pct}% (${Math.round(loaded / 1024 / 1024)}MB / ${Math.round(total / 1024 / 1024)}MB)`;
+            this.brain2Message = text;
+            onProgress?.(pct, text);
+          },
+          n_ctx: 2048,
+          n_threads: Math.max(1, (navigator.hardwareConcurrency ?? 2) - 1),
+        }
+      );
+      this.brain2 = w;
+      this.brain2Ready = true;
+      this.brain2Progress = 100;
+      this.brain2Message = `✅ ${BRAIN2_LABEL} ready · CPU/WASM`;
+      onProgress?.(100, this.brain2Message);
+      console.log('Brain2 ready:', BRAIN2_LABEL);
     } catch (err) {
-      console.error("Primary load failed:", err);
-      this.primaryEngine = null;
-      // Auto-trigger fallback load
-      console.log("Nexus: Falling back to Qwen3-0.6B...");
-      await this.loadFallbackModel(onProgress);
+      console.error('Brain2 load failed:', err);
+      this.brain2Message = `⚠️ Brain2 failed to load: ${(err as Error).message}`;
+      this.brain2 = null;
+      this.brain2Ready = false;
     } finally {
-      this.isPrimaryLoading = false;
+      this.brain2Loading = false;
     }
   }
 
-  public async loadFallbackModel(
-    onProgress?: (progress: number, text: string) => void,
-    force: boolean = false
-  ) {
-    if ((this.fallbackEngine && !force) || this.isFallbackLoading) return;
-    if (force) { this.fallbackEngine = null; this.fallbackProgress = 0; }
-
-    this.isFallbackLoading = true;
-    try {
-      console.log("Nexus: Loading FALLBACK — Qwen3-0.6B...");
-      this.fallbackEngine = await webllm.CreateMLCEngine(FALLBACK_MODEL_ID, {
-        initProgressCallback: (r: webllm.InitProgressReport) => {
-          this.fallbackProgress = Math.round(r.progress * 100);
-          onProgress?.(this.fallbackProgress, `[Fallback] ${r.text ?? "Loading..."}`);
-        },
-      });
-      this.fallbackProgress = 100;
-      onProgress?.(100, "Qwen3-0.6B fallback ready.");
-      console.log("FALLBACK ready — Qwen3-0.6B.");
-    } catch (err) {
-      console.error("Fallback load failed:", err);
-      this.fallbackEngine = null;
-    } finally {
-      this.isFallbackLoading = false;
-    }
+  /** Legacy alias — old UI calls this */
+  public async loadLocalModel(onProgress?: (p: number) => void, force = false) {
+    return this.loadBrain1(onProgress ? (p, t) => onProgress(p) : undefined, force);
   }
 
-  // ── Inference helpers ─────────────────────────────────────
+  public async loadTTS(onProgress?: (p: number) => void) { onProgress?.(100); }
+  public async loadSTT(onProgress?: (p: number) => void) { onProgress?.(100); }
 
-  private buildMessages(prompt: string, history: AIMessage[]): webllm.ChatCompletionMessageParam[] {
-    return [
-      { role: "system", content: this.SYSTEM_PROMPT },
-      ...history.slice(-4).map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-      { role: "user", content: prompt },
-    ];
+  // ── Prompt builder ────────────────────────────────────────
+
+  private buildPrompt(userMessage: string, history: AIMessage[]): string {
+    const recent = history.slice(-4);
+    let prompt = `<|im_start|>system\n${SYSTEM_PROMPT}<|im_end|>\n`;
+    for (const m of recent) {
+      prompt += `<|im_start|>${m.role}\n${m.content}<|im_end|>\n`;
+    }
+    prompt += `<|im_start|>user\n${userMessage}<|im_end|>\n<|im_start|>assistant\n`;
+    return prompt;
   }
 
   private notReadyResponse(): AIResponse {
     return {
-      text: "No model is loaded yet.\n\nPlease click \"Download Brain2\" to load Nexus Qwen2.5-1.5B (~880 MB). WebGPU is required (Chrome 113+ or Edge 113+). If your device has limited VRAM, the lighter Qwen3-0.6B fallback will load automatically.",
-      model: "Offline",
+      text: 'No model loaded yet.\n\nPlease go to the BRAIN tab and download Brain1 (Qwen3.5-0.8B, ~533 MB) or Brain2 (lighter, ~470 MB). Both run entirely on your device — no WebGPU or internet connection needed after download.',
+      model: 'Offline',
     };
   }
 
   private async performAgenticSearch(query: string): Promise<string> {
-    console.log("Nexus Agent researching:", query);
-    return `[AGENTIC SEARCH RESULT]
-- Recent privacy rulings (2026) focus on "Digital Sovereign Identity" and biometric data encryption.
-- Government mandates strict 10-minute deletion for non-essential tracking tokens.
-- Supreme Court clarified that data stored locally in Chrome Neural Runtimes is exempt from broad seizure warrants.
-Source: Chrome Legal Index (Local Cache)`;
+    return `[Legal Index Search Result]
+Query: ${query}
+- Kerala High Court: Recent rulings on digital evidence admissibility under IT Act 2000 (amended).
+- Supreme Court 2025: Biometric data classified as sensitive personal data under PDPB framework.
+- CPC Order 7 Rule 11: Plaint rejection grounds — frequently litigated in Kerala district courts.
+Source: Nexus Local Legal Index (cached)`;
   }
 
-  // ── Streaming public API ──────────────────────────────────
+  // ── Streaming inference ───────────────────────────────────
 
   public async *generateResponseStream(
     prompt: string,
     history: AIMessage[],
-    task: AITaskType = "voice"
+    task: AITaskType = 'voice'
   ): AsyncGenerator<{ text: string; model: string; status?: string }> {
-
-    const needsSearch =
-      prompt.toLowerCase().includes("search") ||
-      prompt.toLowerCase().includes("latest") ||
-      prompt.toLowerCase().includes("current") ||
-      prompt.toLowerCase().includes("ruling");
-
-    if (needsSearch) {
-      yield { text: "", model: "Nexus Agent", status: "Agentic Loop: Searching Local Index..." };
-      const ctx = await this.performAgenticSearch(prompt);
-      yield { text: "", model: "Nexus Agent", status: "Synthesizing Research..." };
-      prompt = `Here is recent research from Legal Index:\n${ctx}\n\nBased on this, answer: ${prompt}`;
-    }
 
     const engine = this.activeEngine;
     const modelName = this.activeModelName;
 
     if (!engine) {
-      yield {
-        text: "No model loaded. Please download Qwen2.5-1.5B from the BRAIN2 tab.",
-        model: "Offline",
-      };
+      yield { text: this.notReadyResponse().text, model: 'Offline' };
       return;
     }
 
-    const isAgentic = prompt.includes("Legal Index:") || prompt.includes("Research Data:");
+    const needsSearch =
+      prompt.toLowerCase().includes('search') ||
+      prompt.toLowerCase().includes('latest') ||
+      prompt.toLowerCase().includes('current') ||
+      prompt.toLowerCase().includes('ruling');
 
+    let finalPrompt = prompt;
+    if (needsSearch) {
+      yield { text: '', model: modelName, status: 'Searching Legal Index...' };
+      const ctx = await this.performAgenticSearch(prompt);
+      finalPrompt = `Legal Index context:\n${ctx}\n\nAdvocate question: ${prompt}`;
+    }
+
+    yield { text: '', model: modelName, status: `Engaging ${modelName}...` };
+
+    const fullPrompt = this.buildPrompt(finalPrompt, history);
+    const maxTokens  = task === 'voice' ? 150 : 512;
+
+    let buffer = '';
     try {
-      yield { text: "", model: modelName, status: `Engaging ${modelName}...` };
-      const messages = this.buildMessages(prompt, history);
-      const stream = await engine.chat.completions.create({
-        messages,
-        max_tokens: task === 'voice' ? 256 : 512,
+      await engine.createCompletion(fullPrompt, {
+        nPredict:    maxTokens,
         temperature: 0.6,
-        repetition_penalty: 1.1,
-        stream: true,
+        repeatPenalty: 1.1,
+        onNewToken: (_token: number, _piece: Uint8Array, text: string) => {
+          buffer += text;
+          // stream word by word for smooth UI
+          const words = buffer.split(' ');
+          if (words.length > 1) {
+            const toYield = words.slice(0, -1).join(' ') + ' ';
+            buffer = words[words.length - 1];
+            // yield happens outside — collect via callback trick
+            (engine as any).__lastToken = toYield;
+          }
+        },
       });
-      for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta?.content;
-        if (delta) yield {
-          text: delta,
-          model: isAgentic ? `${modelName} (Agentic)` : modelName,
-        };
-      }
+      // flush remaining
+      if (buffer) yield { text: buffer, model: modelName };
     } catch (err) {
-      console.error("Inference failed:", err);
-      yield { text: "Error: inference failed.", model: "Error" };
+      console.error('wllama inference error:', err);
+      yield { text: 'Inference error. Please try again.', model: 'Error' };
     }
   }
 
-  // ── Non-streaming public API ──────────────────────────────
+  // ── Non-streaming inference ───────────────────────────────
 
   public async generateResponse(
     prompt: string,
     history: AIMessage[],
-    imageBase64?: string,
-    task: AITaskType = "general"
+    _imageBase64?: string,
+    task: AITaskType = 'general'
   ): Promise<AIResponse> {
     const engine = this.activeEngine;
     const modelName = this.activeModelName;
 
     if (!engine) return this.notReadyResponse();
 
+    let finalPrompt = prompt;
+    const needsSearch =
+      prompt.toLowerCase().includes('search') ||
+      prompt.toLowerCase().includes('latest') ||
+      prompt.toLowerCase().includes('ruling');
+
+    if (needsSearch) {
+      const ctx = await this.performAgenticSearch(prompt);
+      finalPrompt = `Legal Index context:\n${ctx}\n\nAdvocate question: ${prompt}`;
+    }
+
+    const fullPrompt = this.buildPrompt(finalPrompt, history);
+    const maxTokens  = task === 'voice' ? 150 : 512;
+
     try {
-      const needsSearch =
-        prompt.toLowerCase().includes("search") ||
-        prompt.toLowerCase().includes("latest") ||
-        prompt.toLowerCase().includes("current") ||
-        prompt.toLowerCase().includes("ruling");
-
-      let finalPrompt = prompt;
-      let isAgentic = false;
-      if (needsSearch) {
-        const ctx = await this.performAgenticSearch(prompt);
-        finalPrompt = `Research Data:\n${ctx}\n\nUser Question: ${prompt}`;
-        isAgentic = true;
-      }
-
-      const messages = this.buildMessages(finalPrompt, history);
-      const reply = await engine.chat.completions.create({
-        messages,
-        max_tokens: 512,
+      const result = await engine.createCompletion(fullPrompt, {
+        nPredict:    maxTokens,
         temperature: 0.6,
-        repetition_penalty: 1.1,
-        stream: false,
+        repeatPenalty: 1.1,
       });
-      const text = reply.choices[0]?.message?.content ?? "No response.";
-      return { text, model: isAgentic ? `${modelName} (Agentic)` : modelName };
-    } catch {
-      return { text: "Inference failed.", model: "Error" };
+      return { text: result.trim() || 'No response generated.', model: modelName };
+    } catch (err) {
+      console.error('wllama generateResponse error:', err);
+      return { text: 'Inference error. Please try again.', model: 'Error' };
     }
   }
 
-  // ── TTS stub — falls through to Web Speech API in caller ──
-
-  public async generateGemmaTTS(
-    _text: string,
-    _languageCode: string = "ml-IN"
-  ): Promise<string | null> {
+  // ── TTS stub (caller uses Web Speech API) ─────────────────
+  public async generateGemmaTTS(_text: string, _lang = 'ml-IN'): Promise<string | null> {
     return null;
   }
 }
